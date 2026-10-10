@@ -1,9 +1,15 @@
-# Build output
-*.exe
+# 编译中间产物
 *.pdb
 *.dll
+_build_tmp.exe
 
-# Self-test output
+# 自测程序是本地跑回归用的，不进仓库
+selftest.exe
+
+# 注意：发布用的「留学模拟器修改器.exe」是故意提交进仓库的，
+# 这样别人不用自己编译就能直接下载，所以这里不忽略 *.exe。
+
+# 自测输出
 selftest_result.txt
 _selftest_work/
 crash.log
