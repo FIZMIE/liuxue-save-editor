@@ -1,0 +1,21 @@
+# Build output
+*.exe
+*.pdb
+*.dll
+
+# Self-test output
+selftest_result.txt
+_selftest_work/
+crash.log
+crash2.log
+ui.log
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+
+# Windows
+Thumbs.db
+desktop.ini
