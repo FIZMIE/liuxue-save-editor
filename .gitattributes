@@ -1,0 +1,16 @@
+# 源码和文档统一按 LF 存进仓库，检出时再按平台转换
+* text=auto
+
+*.cs        text eol=lf
+*.md        text eol=lf
+*.gitignore text eol=lf
+LICENSE     text eol=lf
+
+# cmd 必须是 CRLF，否则某些 Windows 环境下解析会出问题
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+
+# 图片按二进制处理，别做行尾转换
+*.png       binary
+*.ico       binary
+*.exe       binary
