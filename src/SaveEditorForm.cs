@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 
@@ -98,7 +99,7 @@ class SaveForm : Form
 
     ComboBox cmbSave;
     Button btnRescan, btnOpenFile, btnOpenFolder;
-    ListBox nav;
+    NavBar nav;
     Panel host;
     Panel content;
     Label lblStatus;
@@ -118,6 +119,8 @@ class SaveForm : Form
         Font = Theme.Base;
         BackColor = Theme.Bg;
         AutoScaleMode = AutoScaleMode.None;
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint
+               | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
         try { Icon = Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location); } catch { }
 
         BuildTop();
@@ -129,14 +132,39 @@ class SaveForm : Form
         Load += delegate { DoLayout(); ReloadSaveList(); };
     }
 
+    /* 整页重排时先把窗口冻结，排完再一次性画出来。
+       不这样做的话新控件会一个个往下刷，看着就是"从上往下刷新"的老式观感。 */
+    [DllImport("user32.dll")] static extern int SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+    void Freeze() { try { SendMessage(Handle, 0x000B, 0, 0); } catch { } }
+    void Thaw()
+    {
+        try { SendMessage(Handle, 0x000B, 1, 0); } catch { }
+        Invalidate(true);
+    }
+
+    /* 标签默认是不透明的系统灰，会把磨砂玻璃盖住，统一改成透明 */
+    static void MakeGlass(Control c)
+    {
+        try
+        {
+            if (!(c is Glass) && (c is Label || c is CheckBox || c is Panel
+                || c is FlowLayoutPanel || c is TableLayoutPanel))
+                c.BackColor = Color.Transparent;
+        }
+        catch { }
+        foreach (Control ch in c.Controls) MakeGlass(ch);
+    }
+
     /* 四个区域全部按像素算，不依赖 WinForms 的 Dock 顺序 */
     void DoLayout()
     {
         int W = ClientSize.Width, H = ClientSize.Height;
-        if (topPanel != null) topPanel.SetBounds(0, 0, W, 108);
-        if (bottomPanel != null) bottomPanel.SetBounds(0, H - 52, W, 52);
-        if (navPanel != null) navPanel.SetBounds(0, 108, 170, Math.Max(10, H - 160));
-        if (host != null) host.SetBounds(170, 108, Math.Max(10, W - 170), Math.Max(10, H - 160));
+        const int topH = 108, botH = 52, gap = 12, navW = 170;
+        if (topPanel != null) topPanel.SetBounds(0, 0, W, topH);
+        if (bottomPanel != null) bottomPanel.SetBounds(0, H - botH, W, botH);
+        if (navPanel != null) navPanel.SetBounds(gap, topH, navW, Math.Max(10, H - topH - botH - gap));
+        if (host != null) host.SetBounds(gap + navW + gap, topH,
+            Math.Max(10, W - navW - gap * 3), Math.Max(10, H - topH - botH - gap));
     }
     /* ==================== 顶栏 ==================== */
     void BuildTop()
@@ -148,17 +176,22 @@ class SaveForm : Form
         Panel p = topPanel;
 
         /* 深色标题条 */
-        Panel hd = new Panel();
+        Glass hd = new Glass();
         hd.SetBounds(0, 0, 4000, 56);
-        hd.BackColor = Theme.Header;
+        hd.FillTop = Theme.Header;
+        hd.FillBottom = Theme.Header;
+        hd.DrawEdge = false;
         hd.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         hd.Paint += delegate(object s, PaintEventArgs e)
         {
             e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
             using (SolidBrush b = new SolidBrush(Color.White))
                 e.Graphics.DrawString("留学模拟器 存档修改器", Theme.HeaderTitle, b, 20, 14);
+            /* 版本号跟在标题后面，位置按实测宽度算 —— 换字体后标题宽度会变，
+               写死 x 就会叠在一起 */
+            Size ts = TextRenderer.MeasureText(e.Graphics, "留学模拟器 存档修改器", Theme.HeaderTitle);
             using (SolidBrush b = new SolidBrush(Theme.HeaderSub))
-                e.Graphics.DrawString("v" + APPVER, Theme.Small, b, 222, 24);
+                e.Graphics.DrawString("v" + APPVER, Theme.Small, b, 22 + ts.Width, 26);
             TextRenderer.DrawText(e.Graphics, "by " + AUTHOR, Theme.Small,
                 new Rectangle(0, 0, ClientSize.Width - 22, hd.Height), Theme.HeaderSub,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
@@ -166,9 +199,12 @@ class SaveForm : Form
         p.Controls.Add(hd);
 
         /* 白色存档选择条 */
-        Panel bar = new Panel();
+        Glass bar = new Glass();
         bar.SetBounds(0, 56, 4000, 52);
-        bar.BackColor = Color.White;
+        bar.FillTop = Color.White;
+        bar.FillBottom = Color.White;
+        bar.DrawEdge = false;
+        bar.HairBottom = true;
         bar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         bar.Paint += delegate(object s, PaintEventArgs e)
         {
@@ -209,11 +245,10 @@ class SaveForm : Form
     /* ==================== 左侧导航 ==================== */
     void BuildNav()
     {
-        navPanel = new Panel();
+        navPanel = new NavBar();
         navPanel.SetBounds(0, 108, 170, 10);
         navPanel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom;
-        Panel left = navPanel;
-        left.BackColor = Color.White;
+        NavBar left = (NavBar)navPanel;
         left.Paint += delegate(object s, PaintEventArgs e)
         {
             using (Pen pen = new Pen(Theme.Border))
@@ -221,7 +256,7 @@ class SaveForm : Form
         };
         Controls.Add(left);
 
-        nav = new NavList();
+        nav = new NavBar();
         nav.Dock = DockStyle.Fill;
         foreach (string n in NavNames) nav.Items.Add(n);
         nav.SelectedIndexChanged += delegate { ShowPage(); };
@@ -230,7 +265,7 @@ class SaveForm : Form
         host = new Panel();
         host.SetBounds(170, 108, 10, 10);
         host.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
-        host.BackColor = Theme.Bg;
+        host.BackColor = Color.Transparent;
         host.AutoScroll = false;
         Controls.Add(host);
 
@@ -241,7 +276,7 @@ class SaveForm : Form
         content = new Panel();
         content.Dock = DockStyle.Fill;
         content.AutoScroll = true;
-        content.BackColor = Theme.Bg;
+        content.BackColor = Color.Transparent;
         host.Controls.Add(content);
 
         nav.SelectedIndex = 0;
@@ -264,6 +299,7 @@ class SaveForm : Form
         if (nav.SelectedIndex < 0 || doc == null) return;
         string key = NavNames[nav.SelectedIndex];
 
+        Freeze();
         content.SuspendLayout();
         content.Controls.Clear();
         content.AutoScrollPosition = new Point(0, 0);
@@ -284,11 +320,9 @@ class SaveForm : Form
         /* 关键：窗口已经显示出来之后再往里加控件，光靠 ResumeLayout 是不够的，
            控件不会自己显示出来（点导航就白屏就是这个原因）。
            这里自顶向下强制把句柄建出来，再逐个刷新。 */
+        MakeGlass(content);
         Realize(content);
-        content.Visible = false;
-        content.Visible = true;
-        content.Invalidate(true);
-        content.Refresh();
+        Thaw();
     }
 
     static void Realize(Control c)
@@ -300,10 +334,13 @@ class SaveForm : Form
     }
     void BuildBottom()
     {
-        bottomPanel = new Panel();
+        bottomPanel = new Glass();
         bottomPanel.SetBounds(0, 0, 10, 52);
         bottomPanel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        bottomPanel.BackColor = Color.White;
+        ((Glass)bottomPanel).FillTop = Color.White;
+        ((Glass)bottomPanel).FillBottom = Color.White;
+        ((Glass)bottomPanel).DrawEdge = false;
+        ((Glass)bottomPanel).HairTop = true;
         Controls.Add(bottomPanel);
         Panel p = bottomPanel;
         p.Paint += delegate(object s, PaintEventArgs e)
@@ -326,7 +363,7 @@ class SaveForm : Form
         fl.FlowDirection = FlowDirection.RightToLeft;
         fl.WrapContents = false;
         fl.AutoSize = true;
-        fl.BackColor = Color.White;
+        fl.BackColor = Color.Transparent;
         fl.Padding = new Padding(0, 12, 18, 0);
         p.Controls.Add(fl);
 
@@ -421,6 +458,13 @@ class SaveForm : Form
     }
 
     /* ==================== 字段辅助 ==================== */
+    /* 按文字实际宽度做按钮：换成等宽字体后写死宽度会被截断 */
+    static Flat Btn(string text, bool primary)
+    {
+        Size sz = TextRenderer.MeasureText(text, Theme.Base);
+        return new Flat(text, primary, sz.Width + 28, 28);
+    }
+
     Panel     Page(string key)
     {
         content.Controls.Clear();
@@ -603,13 +647,13 @@ class SaveForm : Form
                                   SaveDoc.Num(doc.GetVal("mental"),0) + "　饱食 " + SaveDoc.Num(doc.GetVal("hunger"),0) },
             new string[] { "数据版本", SaveDoc.Str(doc.GetVal("save_schema_version")) }
         };
-        int yy = 22;
+        int yy = 52;
         foreach (string[] r in rows)
         {
-            Label a = new Label(); a.Text = r[0]; a.SetBounds(14, yy, 90, 20);
+            Label a = new Label(); a.Text = r[0]; a.SetBounds(18, yy, 96, 20);
             a.ForeColor = Color.FromArgb(110, 110, 110);
             g.Controls.Add(a);
-            Label b = new Label(); b.Text = r[1]; b.SetBounds(108, yy, W - 140, 20);
+            Label b = new Label(); b.Text = r[1]; b.SetBounds(120, yy, W - 150, 20);
             g.Controls.Add(b);
             yy += 24;
         }
@@ -644,19 +688,18 @@ class SaveForm : Form
         string[] quick = new string[] { "1000", "10000", "100000", "1000000" };
         foreach (string q in quick)
         {
-            Button b = new Button(); b.Text = "设为 " + q;
-            b.Width = 92; b.Height = 26;
+            Flat b = Btn("设为 " + q, false);
             string qq = q;
             b.Click += delegate { SetMoney(double.Parse(qq)); };
             fl.Controls.Add(b);
         }
-        Button b1 = new Button(); b1.Text = "+1000"; b1.Width = 70; b1.Height = 26;
+        Flat b1 = Btn("+1000", false);
         b1.Click += delegate { SetMoney(SaveDoc.Num(doc.GetVal("cash"), 0) + 1000); };
         fl.Controls.Add(b1);
-        Button b2 = new Button(); b2.Text = "+10000"; b2.Width = 70; b2.Height = 26;
+        Flat b2 = Btn("+10000", false);
         b2.Click += delegate { SetMoney(SaveDoc.Num(doc.GetVal("cash"), 0) + 10000); };
         fl.Controls.Add(b2);
-        Button b3 = new Button(); b3.Text = "同步总资产"; b3.Width = 100; b3.Height = 26;
+        Flat b3 = Btn("同步总资产", false);
         b3.Click += delegate {
             double cash = SaveDoc.Num(doc.GetVal("cash"), 0);
             double units = SaveDoc.Num(doc.GetVal("stock_units"), 0);
@@ -792,7 +835,7 @@ class SaveForm : Form
 
         Card g = NewGroup(page, "批量操作", 10, 10, W);
         FlowLayoutPanel fl = new FlowLayoutPanel();
-        fl.SetBounds(14, 22, W - 40, 34);
+        fl.SetBounds(16, 50, W - 44, 34);
         string[][] bulk = new string[][]
         {
             new string[] { "好感全部拉满", "max" },
@@ -803,16 +846,13 @@ class SaveForm : Form
         };
         foreach (string[] b in bulk)
         {
-            Button btn = new Button();
-            btn.Text = b[0];
-            btn.Width = b[0].Length * 15 + 16;
-            btn.Height = 26;
+            Flat btn = Btn(b[0], false);
             string mode = b[1];
             btn.Click += delegate { BulkRel(mode); };
             fl.Controls.Add(btn);
         }
         g.Controls.Add(fl);
-        g.Height = 62;
+        g.Height = 92;
 
         Label tip = new Label();
         tip.Text = "好感是数值，关系是阶段，两个一起改比较自然。0-14 认识，15-59 朋友，60 以上挚友。";
@@ -1043,7 +1083,7 @@ class SaveForm : Form
         Card g = NewGroup(page, "新手引导任务", 10, top, W);
         Dictionary<string, object> latched = doc.GetVal("flags.onboarding_latched") as Dictionary<string, object>;
         System.Collections.IList rewarded = doc.GetVal("flags.onboarding_tasks_rewarded") as System.Collections.IList;
-        int yy = 34;
+        int yy = 52;
         foreach (string[] s in OnbSteps)
         {
             GreenCheck c = new GreenCheck();
@@ -1071,7 +1111,7 @@ class SaveForm : Form
             g.Controls.Add(l);
             yy += 26;
         }
-        Button ba = new Button(); ba.Text = "全部完成"; ba.SetBounds(14, yy + 6, 90, 26);
+        Flat ba = Btn("全部完成", false); ba.SetBounds(16, yy + 10, ba.Width, 28);
         ba.Click += delegate {
             Dictionary<string, object> lt = doc.GetVal("flags.onboarding_latched") as Dictionary<string, object>;
             Dictionary<string, object> nw = SaveDoc.Clone(lt);
@@ -1089,7 +1129,7 @@ class SaveForm : Form
             BuildQuest(); UpdateStatus();
         };
         g.Controls.Add(ba);
-        Button br = new Button(); br.Text = "全部重置"; br.SetBounds(110, yy + 6, 90, 26);
+        Flat br = Btn("全部重置", false); br.SetBounds(16 + ba.Width + 10, yy + 10, br.Width, 28);
         br.Click += delegate {
             Dictionary<string, object> lt = doc.GetVal("flags.onboarding_latched") as Dictionary<string, object>;
             Dictionary<string, object> nw = SaveDoc.Clone(lt);
@@ -1106,7 +1146,7 @@ class SaveForm : Form
         /* --- 引导阶段 --- */
         Card g2 = NewGroup(page, "引导阶段", 10, top, W);
         System.Collections.IList stages = doc.GetVal("flags.onboarding_stages_rewarded") as System.Collections.IList;
-        yy = 34;
+        yy = 52;
         foreach (string[] s in OnbStages)
         {
             GreenCheck c = new GreenCheck();
@@ -1137,7 +1177,7 @@ class SaveForm : Form
         System.Collections.IList nodes = doc.GetVal("academic_nodes") as System.Collections.IList;
         DataGridView dgv = new DataGridView();
         GridStyle.Apply(dgv);
-        dgv.SetBounds(14, 24, W - 40, Math.Max(200, content.ClientSize.Height - top - 56));
+        dgv.SetBounds(16, 52, W - 44, Math.Max(200, content.ClientSize.Height - top - 56));
         dgv.AllowUserToAddRows = false;
         dgv.RowHeadersVisible = false;
         dgv.Columns.Add("nm", "项目");
@@ -1188,7 +1228,7 @@ class SaveForm : Form
             UpdateStatus();
         };
         g3.Controls.Add(dgv);
-        Button bfa = new Button(); bfa.Text = "完成所有作业"; bfa.SetBounds(14, 202, 120, 26);
+        Flat bfa = Btn("完成所有作业", false); bfa.SetBounds(16, dgv.Bottom + 12, bfa.Width, 28);
         bfa.Click += delegate {
             System.Collections.IList ns = doc.GetVal("academic_nodes") as System.Collections.IList;
             if (ns != null)
@@ -1206,7 +1246,7 @@ class SaveForm : Form
             BuildQuest(); UpdateStatus();
         };
         g3.Controls.Add(bfa);
-        Button bfp = new Button(); bfp.Text = "所有进度填满"; bfp.SetBounds(140, 202, 120, 26);
+        Flat bfp = Btn("所有进度填满", false); bfp.SetBounds(16 + bfa.Width + 10, dgv.Bottom + 12, bfp.Width, 28);
         bfp.Click += delegate {
             System.Collections.IList ns = doc.GetVal("academic_nodes") as System.Collections.IList;
             if (ns != null)
@@ -1226,7 +1266,7 @@ class SaveForm : Form
         /* --- 打工剧情线 --- */
         Card g4 = NewGroup(page, "打工剧情线", 10, top, W);
         Dictionary<string, object> sl = doc.GetVal("flags.job_storylines_v1") as Dictionary<string, object>;
-        int row = 24;
+        int row = 52;
         if (sl != null && sl.Count > 0)
         {
             foreach (KeyValuePair<string, object> kv in sl)
@@ -1244,9 +1284,8 @@ class SaveForm : Form
                 l.SetBounds(14, row + 2, W - 200, 20);
                 g4.Controls.Add(l);
 
-                Button b = new Button();
-                b.Text = "全部完成";
-                b.SetBounds(W - 130, row, 90, 24);
+                Flat b = Btn("全部完成", false);
+                b.SetBounds(W - b.Width - 16, row - 2, b.Width, 28);
                         string key = kv.Key;
                 b.Click += delegate { FinishStoryline(key); };
                 g4.Controls.Add(b);
@@ -1271,7 +1310,7 @@ class SaveForm : Form
         AddRow(g5, "学期内周数", null, NumCtrl("semester_week", 1, 16, 1, 0), 120);
         AddRow(g5, "已完成学期", null, NumCtrl("completed_semesters", 0, 8, 1, 0), 120);
         AddRow(g5, "当前学期", null, NumCtrl("full_game_foundation.run.semester_index", 1, 9, 1, 0), 120);
-        Button bs = new Button(); bs.Text = "同步时间字段"; bs.SetBounds(14, rowY + 6, 120, 26);
+        Flat bs = Btn("同步时间字段", false); bs.SetBounds(14, rowY + 6, bs.Width, 28);
         bs.Click += delegate {
             object y = doc.GetVal("year"), m = doc.GetVal("month"), d = doc.GetVal("day");
             if (y != null && m != null && d != null)
@@ -1361,7 +1400,7 @@ class SaveForm : Form
         AddRow(g, "心态", "0 - 100", NumCtrl("mental", 0, 100, 1m, 0), 120);
         AddRow(g, "饱食度", "0 - 100", NumCtrl("hunger", 0, 100, 1m, 0), 120);
         AddRow(g, "热量负担", "越低越好", NumCtrl("calorie_burden", 0, 100000m, 1m, 0), 120);
-        Button b = new Button(); b.Text = "三项拉满"; b.SetBounds(14, rowY + 6, 100, 26);
+        Flat b = Btn("三项拉满", false); b.SetBounds(14, rowY + 6, b.Width, 28);
         b.Click += delegate {
             doc.Commit("health", 100, "健康");
             doc.Commit("mental", 100, "心态");
@@ -1394,18 +1433,18 @@ class SaveForm : Form
         tip.SetBounds(14, 12, W - 40, 20);
         page.Controls.Add(tip);
 
-        Button ba = new Button(); ba.Text = "校验并应用"; ba.SetBounds(14, 38, 100, 26);
+        Flat ba = Btn("校验并应用", true); ba.SetBounds(16, 50, ba.Width, 28);
         ba.Click += delegate { ApplyRaw(); };
         page.Controls.Add(ba);
-        Button br = new Button(); br.Text = "重新载入"; br.SetBounds(120, 38, 90, 26);
+        Flat br = Btn("重新载入", false); br.SetBounds(16 + ba.Width + 10, 50, br.Width, 28);
         br.Click += delegate { ShowPage(); };
         page.Controls.Add(br);
-        Button bf = new Button(); bf.Text = "格式化"; bf.SetBounds(216, 38, 80, 26);
+        Flat bf = Btn("格式化", false); bf.SetBounds(16 + ba.Width + br.Width + 20, 50, bf.Width, 28);
         bf.Click += delegate { FormatRaw(); };
         page.Controls.Add(bf);
 
         rawState = new Label();
-        rawState.SetBounds(306, 42, W - 340, 20);
+        rawState.SetBounds(16 + ba.Width + br.Width + bf.Width + 30, 54, Math.Max(120, W - (60 + ba.Width + br.Width + bf.Width)), 20);
         rawState.ForeColor = Color.FromArgb(110, 110, 110);
         page.Controls.Add(rawState);
 

@@ -53,8 +53,10 @@ static class SelfTest
         Out("存档目录: " + dir);
 
         string[] names = new string[] { "save_0.dat", "save_5.dat" };
-        string work = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "_selftest_work");
-        if (Directory.Exists(work)) Directory.Delete(work, true);
+        /* 每次跑用一个全新的子目录。
+           上一轮残留的文件有可能还被杀毒软件占着，直接删整棵目录会失败。 */
+        string work = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "_selftest_work",
+                                   DateTime.Now.ToString("HHmmssfff"));
         Directory.CreateDirectory(work);
 
         foreach (string n in names)

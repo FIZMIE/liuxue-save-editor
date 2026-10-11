@@ -247,14 +247,41 @@ class SaveDoc
         return dir;
     }
 
+    /* 删不掉就算了，别为了清理临时文件把保存搞失败 */
+    static void TryDelete(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); } catch { }
+    }
+
     public void Save()
     {
         string text = Serialize();
         /* 先写临时文件再替换，写一半断电也不会毁掉存档 */
         string tmp = FilePath + ".tmp_write";
         File.WriteAllText(tmp, text, new UTF8Encoding(false));
-        if (File.Exists(FilePath)) File.Delete(FilePath);
-        File.Move(tmp, FilePath);
+
+        /* 用原子替换，不走"先删后移"。
+           一是 File.Delete + File.Move 在 Windows 上本来就有竞态（杀软、
+           搜索索引只要短暂持有句柄就会失败）；二是某些受限环境里
+           File.Delete 会静默失败 —— 不报错但文件还在，接着 Move 就炸。 */
+        if (File.Exists(FilePath))
+        {
+            try
+            {
+                File.Replace(tmp, FilePath, null, true);
+            }
+            catch (Exception)
+            {
+                // 个别文件系统不支持 Replace，退回整体覆盖
+                File.Copy(tmp, FilePath, true);
+                TryDelete(tmp);
+            }
+        }
+        else
+        {
+            File.Move(tmp, FilePath);
+        }
+
         OrigText = text;
         Orig = Ser().Deserialize<Dictionary<string, object>>(text);
         Changes.Clear();

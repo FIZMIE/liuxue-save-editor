@@ -1,6 +1,9 @@
 /* =====================================================================
-   界面外观：统一配色 + 圆角卡片 + 圆角按钮 + 自绘导航 + 绿色打勾框
-   刻意避开 WinForms 默认那种灰扑扑的 GroupBox 观感。
+   界面外观
+     - 字体：Maple Mono CN（装了就用，没装自动回落微软雅黑）
+     - 背景：纯色（不做桌面模糊，那个太吃性能）
+     - 玻璃感只做在按钮/卡片上：渐变 + 顶部高光 + 细描边
+     - 圆角一律用抗锯齿绘制，不用 Region 硬裁（Region 是锯齿的来源）
    ===================================================================== */
 using System;
 using System.Collections.Generic;
@@ -8,34 +11,97 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
+/* ---------------- 字体 ---------------- */
+static class Fonts
+{
+    public static readonly string Ui;
+    public static readonly string Medium;
+    public static readonly string Semi;
+
+    static Fonts()
+    {
+        Ui = Pick(new string[] { "Maple Mono CN", "MapleMono-CN" }, "Microsoft YaHei UI");
+        Medium = Pick(new string[] { "Maple Mono CN Medium" }, Ui);
+        Semi = Pick(new string[] { "Maple Mono CN SemiBold" }, Ui);
+    }
+
+    static string Pick(string[] wanted, string fallback)
+    {
+        try
+        {
+            FontFamily[] all = FontFamily.Families;
+            foreach (string w in wanted)
+                foreach (FontFamily f in all)
+                    if (string.Equals(f.Name, w, StringComparison.OrdinalIgnoreCase)) return f.Name;
+        }
+        catch { }
+        return fallback;
+    }
+
+    public static Font Get(float size) { return Get(size, FontStyle.Regular); }
+    public static Font Get(float size, FontStyle style)
+    {
+        try { return new Font(Ui, size, style); }
+        catch { try { return new Font("Microsoft YaHei UI", size, style); } catch { return new Font(FontFamily.GenericSansSerif, size); } }
+    }
+    public static Font Mid(float size)
+    {
+        try { return new Font(Medium, size, FontStyle.Regular); }
+        catch { return Get(size); }
+    }
+    public static Font Sbx(float size)
+    {
+        try { return new Font(Semi, size, FontStyle.Regular); }
+        catch { return Get(size, FontStyle.Bold); }
+    }
+}
+
+/* ---------------- 配色 ---------------- */
 static class Theme
 {
-    public static readonly Color Bg        = Color.FromArgb(245, 246, 248);
+    public static readonly Color Bg        = Color.FromArgb(246, 247, 249);  // 窗口底色
     public static readonly Color Card      = Color.White;
-    public static readonly Color Border    = Color.FromArgb(226, 230, 235);
-    public static readonly Color Text      = Color.FromArgb(31, 35, 40);
-    public static readonly Color Muted     = Color.FromArgb(107, 114, 128);
-    public static readonly Color Faint     = Color.FromArgb(156, 163, 175);
-    public static readonly Color Accent    = Color.FromArgb(37, 99, 235);
-    public static readonly Color AccentDim = Color.FromArgb(29, 78, 216);
-    public static readonly Color AccentBg  = Color.FromArgb(235, 242, 254);
+    public static readonly Color Border    = Color.FromArgb(228, 231, 236);
+    public static readonly Color Text      = Color.FromArgb(28, 32, 38);
+    public static readonly Color Muted     = Color.FromArgb(105, 113, 125);
+    public static readonly Color Faint     = Color.FromArgb(150, 158, 170);
+    public static readonly Color Accent    = Color.FromArgb(10, 132, 255);   // 苹果蓝
+    public static readonly Color AccentDim = Color.FromArgb(0, 110, 230);
+    public static readonly Color AccentBg  = Color.FromArgb(46, 10, 132, 255);
     public static readonly Color Header    = Color.FromArgb(30, 41, 59);
-    public static readonly Color HeaderSub = Color.FromArgb(148, 163, 184);
-    public static readonly Color Ok        = Color.FromArgb(22, 163, 74);   // 打勾的绿
-    public static readonly Color OkDim     = Color.FromArgb(21, 128, 61);
+    public static readonly Color HeaderSub = Color.FromArgb(170, 182, 198);
+    public static readonly Color Ok        = Color.FromArgb(48, 209, 88);    // 苹果绿
+    public static readonly Color OkDim     = Color.FromArgb(36, 178, 72);
     public static readonly Color Warn      = Color.FromArgb(161, 98, 7);
-    public static readonly Color Hover     = Color.FromArgb(241, 243, 245);
+    public static readonly Color Hover     = Color.FromArgb(24, 120, 130, 150);
 
-    public static Font Base    = new Font("Microsoft YaHei UI", 9f);
-    public static Font Bold    = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold);
-    public static Font Title   = new Font("Microsoft YaHei UI", 11.5f, FontStyle.Bold);
-    public static Font Small   = new Font("Microsoft YaHei UI", 8.25f);
-    public static Font Mono    = new Font("Consolas", 9f);
-    public static Font CardTitle   = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold);
-    public static Font HeaderTitle = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold);
-    public static Font NavBold     = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
+    /* 玻璃表面：上下两端颜色 + 描边，靠渐变和高光做质感 */
+    public static readonly Color GlassTop  = Color.FromArgb(255, 255, 255, 255);
+    public static readonly Color GlassBot  = Color.FromArgb(236, 242, 246, 250);
+    public static readonly Color GlassEdge = Color.FromArgb(219, 224, 231);
+    public static readonly Color GlassHi   = Color.FromArgb(190, 255, 255, 255);
+    public static readonly Color HairLine  = Color.FromArgb(232, 235, 240);
 
-    public const int Radius = 8;
+    public static readonly Font Base    = Fonts.Get(9.5f);
+    public static readonly Font Bold    = Fonts.Get(9.5f, FontStyle.Bold);
+    public static readonly Font Title   = Fonts.Sbx(11.5f);
+    public static readonly Font Small   = Fonts.Get(8.5f);
+    public static readonly Font Mono    = Fonts.Get(9.5f);
+    public static readonly Font CardTitle   = Fonts.Sbx(9.5f);
+    public static readonly Font HeaderTitle = Fonts.Sbx(12.5f);
+    public static readonly Font NavBold     = Fonts.Mid(10f);
+    public static readonly Font NavItem     = Fonts.Get(10f);
+
+    public const int Radius   = 16;   // 卡片 / 侧边栏
+    public const int RadiusSm = 10;   // 按钮 / 高亮
+
+    /* 统一打开抗锯齿 */
+    public static void AA(Graphics g)
+    {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+    }
 
     /* 圆角矩形路径 */
     public static GraphicsPath Round(Rectangle r, int radius)
@@ -54,87 +120,147 @@ static class Theme
     /* 圆角打勾的小方框：勾上就是绿底白勾 */
     public static void DrawCheck(Graphics g, Rectangle box, bool on, bool hover)
     {
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        using (GraphicsPath p = Round(box, 4))
+        AA(g);
+        using (GraphicsPath p = Round(box, 5))
         {
             if (on)
             {
-                using (SolidBrush b = new SolidBrush(hover ? OkDim : Ok)) g.FillPath(b, p);
-                using (Pen pen = new Pen(Color.White, 2f))
+                using (LinearGradientBrush b = new LinearGradientBrush(
+                    new Rectangle(box.X, box.Y, box.Width, box.Height + 1),
+                    Color.FromArgb(90, 220, 120), hover ? OkDim : Ok, 90f))
+                    g.FillPath(b, p);
+                using (Pen pen = new Pen(Color.FromArgb(150, 255, 255, 255), 2f))
                 {
-                    pen.StartCap = LineCap.Round;
-                    pen.EndCap = LineCap.Round;
-                    pen.LineJoin = LineJoin.Round;
+                    pen.StartCap = LineCap.Round; pen.EndCap = LineCap.Round; pen.LineJoin = LineJoin.Round;
                     float x = box.X, y = box.Y, w = box.Width, h = box.Height;
-                    PointF[] pts = new PointF[]
+                    g.DrawLines(pen, new PointF[]
                     {
                         new PointF(x + w * 0.26f, y + h * 0.52f),
                         new PointF(x + w * 0.43f, y + h * 0.70f),
                         new PointF(x + w * 0.76f, y + h * 0.31f)
-                    };
-                    g.DrawLines(pen, pts);
+                    });
                 }
             }
             else
             {
-                using (SolidBrush b = new SolidBrush(hover ? Color.FromArgb(249, 250, 251) : Color.White))
+                using (SolidBrush b = new SolidBrush(hover ? Color.FromArgb(250, 251, 252) : Color.FromArgb(240, 242, 245)))
                     g.FillPath(b, p);
-                using (Pen pen = new Pen(hover ? Faint : Color.FromArgb(203, 210, 219), 1.4f))
+                using (Pen pen = new Pen(hover ? Faint : Color.FromArgb(200, 207, 216), 1.4f))
                     g.DrawPath(pen, p);
             }
         }
     }
-}
 
-/* 白色圆角卡片：1px 边框 + 标题栏 */
-class Card : Panel
-{
-    public string Title = "";
-    public int BodyTop = 38;
-
-    public Card(string title)
+    /* 画一块玻璃面：渐变底 + 描边 + 顶部高光 */
+    public static void GlassFace(Graphics g, Rectangle r, int radius,
+                                 Color top, Color bottom, Color edge, bool highlight)
     {
-        Title = title;
-        BackColor = Theme.Card;
-        DoubleBuffered = true;
-        SetStyle(ControlStyles.ResizeRedraw | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
-    }
-
-    protected override void OnResize(EventArgs e)
-    {
-        base.OnResize(e);
-        if (Width > 2 && Height > 2)
+        AA(g);
+        if (r.Width <= 0 || r.Height <= 0) return;
+        using (GraphicsPath p = Round(r, radius))
         {
-            using (GraphicsPath p = Theme.Round(new Rectangle(0, 0, Width, Height), Theme.Radius))
-                Region = new Region(p);
+            using (LinearGradientBrush b = new LinearGradientBrush(
+                new Rectangle(r.X, r.Y, r.Width, r.Height + 1), top, bottom, 90f))
+                g.FillPath(b, p);
+            using (Pen pen = new Pen(edge)) g.DrawPath(pen, p);
+            if (highlight)
+                using (Pen hp = new Pen(GlassHi))
+                {
+                    hp.StartCap = LineCap.Round; hp.EndCap = LineCap.Round;
+                    g.DrawLine(hp, r.X + radius / 2, r.Y + 1, r.Right - radius / 2 - 1, r.Y + 1);
+                }
         }
     }
+}
+
+/* ---------------- 面板基类 ---------------- */
+class Glass : Panel
+{
+    public Color FillTop = Color.White;
+    public Color FillBottom = Color.FromArgb(246, 247, 249);
+    public Color Edge = Theme.Border;
+    public bool DrawEdge = true;
+    public int Radius = 0;
+    public string Title = "";
+    public int BodyTop = 38;
+    public bool HairBottom = false;
+    public bool HairTop = false;
+    public bool Highlight = false;
+
+    public Glass()
+    {
+        SetStyle(ControlStyles.SupportsTransparentBackColor
+               | ControlStyles.OptimizedDoubleBuffer
+               | ControlStyles.AllPaintingInWmPaint
+               | ControlStyles.UserPaint
+               | ControlStyles.ResizeRedraw, true);
+        BackColor = Color.Transparent;
+    }
+
+    /* 先把父级底色画进来，圆角外面才是对的颜色（不用 Region，避免锯齿） */
+    protected override void OnPaintBackground(PaintEventArgs e) { base.OnPaintBackground(e); }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         Graphics g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        using (GraphicsPath p = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), Theme.Radius))
+        Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+        if (r.Width <= 0 || r.Height <= 0) return;
+
+        if (Radius > 0)
+            Theme.GlassFace(g, r, Radius, FillTop, FillBottom, Edge, Highlight && DrawEdge);
+        else
         {
-            using (SolidBrush b = new SolidBrush(Theme.Card)) g.FillPath(b, p);
-            using (Pen pen = new Pen(Theme.Border)) g.DrawPath(pen, p);
+            if (FillTop == FillBottom)
+                using (SolidBrush b = new SolidBrush(FillTop)) g.FillRectangle(b, 0, 0, Width, Height);
+            else
+                using (LinearGradientBrush b = new LinearGradientBrush(
+                    new Rectangle(0, 0, Width, Height + 1), FillTop, FillBottom, 90f))
+                    g.FillRectangle(b, 0, 0, Width, Height);
+            if (DrawEdge)
+                using (Pen pen = new Pen(Edge)) g.DrawRectangle(pen, r);
+            if (Highlight)
+                using (Pen hp = new Pen(Theme.GlassHi))
+                    g.DrawLine(hp, 0, 0, Width, 0);
         }
+
+        if (HairBottom)
+            using (Pen pen = new Pen(Theme.HairLine)) g.DrawLine(pen, 0, Height - 1, Width, Height - 1);
+        if (HairTop)
+            using (Pen pen = new Pen(Theme.HairLine)) g.DrawLine(pen, 0, 0, Width, 0);
+
         if (Title.Length > 0)
         {
+            Theme.AA(g);
             using (SolidBrush b = new SolidBrush(Theme.Text))
-                g.DrawString(Title, Theme.CardTitle, b, 14, 11);
-            using (Pen p = new Pen(Theme.Border))
-                g.DrawLine(p, 12, BodyTop - 1, Width - 12, BodyTop - 1);
+                g.DrawString(Title, Theme.CardTitle, b, 16, 12);
+            using (Pen p = new Pen(Color.FromArgb(160, 232, 235, 240)))
+                g.DrawLine(p, 14, BodyTop - 1, Width - 14, BodyTop - 1);
         }
-        else BodyTop = 10;
+
+        base.OnPaint(e);   // 让外部订阅的 Paint 在底色之后触发
     }
 }
 
-/* 圆角扁平按钮 */
+/* 卡片：圆角 + 轻微玻璃渐变 */
+class Card : Glass
+{
+    public Card(string title)
+    {
+        Title = title;
+        Radius = Theme.Radius;
+        FillTop = Color.FromArgb(255, 255, 255, 255);
+        FillBottom = Color.FromArgb(249, 251, 253, 255);
+        Edge = Theme.Border;
+        Highlight = true;
+        BackColor = Color.Transparent;
+    }
+}
+
+/* ---------------- 玻璃按钮 ---------------- */
 class Flat : Button
 {
     public bool Primary;
-    bool hover;
+    bool hover, down;
 
     public Flat(string text, bool primary, int w, int h)
     {
@@ -144,54 +270,54 @@ class Flat : Button
         Font = Theme.Base;
         Cursor = Cursors.Hand;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
-               | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+               | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw
+               | ControlStyles.SupportsTransparentBackColor, true);
+        BackColor = Color.Transparent;
         MouseEnter += delegate { hover = true; Invalidate(); };
-        MouseLeave += delegate { hover = false; Invalidate(); };
+        MouseLeave += delegate { hover = false; down = false; Invalidate(); };
+        MouseDown += delegate { down = true; Invalidate(); };
+        MouseUp += delegate { down = false; Invalidate(); };
         EnabledChanged += delegate { Invalidate(); };
     }
 
-    protected override void OnResize(EventArgs e)
-    {
-        base.OnResize(e);
-        if (Width > 2 && Height > 2)
-        {
-            using (GraphicsPath p = Theme.Round(new Rectangle(0, 0, Width, Height), 6))
-                Region = new Region(p);
-        }
-    }
+    protected override void OnPaintBackground(PaintEventArgs e) { base.OnPaintBackground(e); }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         Graphics g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        Color back, fore, line;
+        Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
+        if (r.Width <= 0 || r.Height <= 0) return;
+
+        Color top, bot, edge;
+        Color fore;
 
         if (!Enabled)
         {
-            back = Color.FromArgb(243, 244, 246); fore = Theme.Faint; line = Theme.Border;
+            top = Color.FromArgb(250, 251, 252); bot = Color.FromArgb(244, 246, 248);
+            edge = Color.FromArgb(230, 233, 238); fore = Theme.Faint;
         }
         else if (Primary)
         {
-            back = hover ? Theme.AccentDim : Theme.Accent; fore = Color.White; line = back;
+            top = down ? Theme.AccentDim : (hover ? Color.FromArgb(64, 156, 255) : Color.FromArgb(48, 148, 255));
+            bot = down ? Color.FromArgb(0, 96, 210) : (hover ? Theme.AccentDim : Theme.Accent);
+            edge = Color.FromArgb(0, 100, 210);
+            fore = Color.White;
         }
         else
         {
-            back = hover ? Theme.Hover : Color.White;
+            top = down ? Color.FromArgb(232, 236, 241) : (hover ? Color.FromArgb(255, 255, 255) : Color.FromArgb(253, 254, 255));
+            bot = down ? Color.FromArgb(222, 227, 233) : (hover ? Color.FromArgb(240, 244, 248) : Color.FromArgb(234, 239, 244));
+            edge = hover ? Color.FromArgb(196, 204, 214) : Theme.GlassEdge;
             fore = Theme.Text;
-            line = hover ? Color.FromArgb(200, 206, 214) : Theme.Border;
         }
 
-        using (GraphicsPath p = Theme.Round(new Rectangle(0, 0, Width - 1, Height - 1), 6))
-        {
-            using (SolidBrush b = new SolidBrush(back)) g.FillPath(b, p);
-            using (Pen pen = new Pen(line)) g.DrawPath(pen, p);
-        }
-        TextRenderer.DrawText(g, Text, Font, new Rectangle(0, 0, Width, Height), fore,
+        Theme.GlassFace(g, r, Theme.RadiusSm, top, bot, edge, true);
+        TextRenderer.DrawText(g, Text, Font, new Rectangle(0, down ? 1 : 0, Width, Height), fore,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
     }
 }
 
-/* 绿色打勾的方框（替代系统默认那种小灰勾） */
+/* ---------------- 绿色打勾方框 ---------------- */
 class GreenCheck : CheckBox
 {
     bool hover;
@@ -201,78 +327,88 @@ class GreenCheck : CheckBox
         Font = Theme.Base;
         Cursor = Cursors.Hand;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
-               | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+               | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw
+               | ControlStyles.SupportsTransparentBackColor, true);
+        BackColor = Color.Transparent;
         MouseEnter += delegate { hover = true; Invalidate(); };
         MouseLeave += delegate { hover = false; Invalidate(); };
         CheckedChanged += delegate { Invalidate(); };
     }
 
+    protected override void OnPaintBackground(PaintEventArgs e) { base.OnPaintBackground(e); }
+
     protected override void OnPaint(PaintEventArgs e)
     {
-        Graphics g = e.Graphics;
-        Color bg = Parent != null ? Parent.BackColor : Theme.Card;
-        using (SolidBrush b = new SolidBrush(bg)) g.FillRectangle(b, ClientRectangle);
-
         int box = 17;
         Rectangle r = new Rectangle(0, (Height - box) / 2, box, box);
-        Theme.DrawCheck(g, r, Checked, hover);
+        Theme.DrawCheck(e.Graphics, r, Checked, hover);
 
         if (Text.Length > 0)
         {
-            Rectangle t = new Rectangle(box + 8, 0, Math.Max(10, Width - box - 8), Height);
-            TextRenderer.DrawText(g, Text, Font, t, Enabled ? Theme.Text : Theme.Faint,
+            Rectangle t = new Rectangle(box + 9, 0, Math.Max(10, Width - box - 9), Height);
+            TextRenderer.DrawText(e.Graphics, Text, Font, t, Enabled ? Theme.Text : Theme.Faint,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix
                 | TextFormatFlags.EndEllipsis);
         }
     }
 }
 
-/* 自绘导航：选中项圆角高亮 + 强调色 */
-class NavList : ListBox
+/* ---------------- 导航（自绘 + 滑动高亮）----------------
+   不用 ListBox：它的 BackColor 不支持透明，而且做不了高亮滑动。 */
+class NavBar : Glass
 {
-    int hoverIndex = -1;
+    public readonly List<string> Items = new List<string>();
+    public event EventHandler SelectedIndexChanged;
 
-    public NavList()
+    int selected = -1;
+    int hoverIndex = -1;
+    float pillY = -1;
+    float pillTarget = 0;
+    public int ItemHeight = 44;
+
+    Timer anim;
+
+    public NavBar()
     {
-        DrawMode = DrawMode.OwnerDrawFixed;
-        BorderStyle = BorderStyle.None;
-        IntegralHeight = false;
-        ItemHeight = 38;
-        HorizontalScrollbar = false;
-        HorizontalExtent = 0;
-        BackColor = Color.White;
-        Font = new Font("Microsoft YaHei UI", 9.5f);
-        SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
+        FillTop = Color.White;
+        FillBottom = Color.White;
+        Radius = Theme.Radius;
+        Edge = Theme.Border;
+        Highlight = false;
+        Font = Theme.NavItem;
+        Cursor = Cursors.Hand;
+
+        anim = new Timer();
+        anim.Interval = 15;
+        anim.Tick += delegate
+        {
+            float d = pillTarget - pillY;
+            if (Math.Abs(d) < 0.4f) { pillY = pillTarget; anim.Stop(); }
+            else pillY += d * 0.32f;
+            Invalidate();
+        };
     }
 
-    protected override void OnDrawItem(DrawItemEventArgs e)
+    public int SelectedIndex
     {
-        if (e.Index < 0) return;
-        Graphics g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        Rectangle b = e.Bounds;
-        bool sel = (e.State & DrawItemState.Selected) != 0;
-
-        using (SolidBrush bg = new SolidBrush(Color.White)) g.FillRectangle(bg, b);
-
-        Rectangle pill = new Rectangle(8, b.Y + 4, Math.Max(10, b.Width - 16), b.Height - 8);
-        if (sel || e.Index == hoverIndex)
+        get { return selected; }
+        set
         {
-            using (GraphicsPath p = Theme.Round(pill, 6))
-            using (SolidBrush br = new SolidBrush(sel ? Theme.AccentBg : Theme.Hover))
-                g.FillPath(br, p);
+            if (value < 0 || value >= Items.Count || value == selected) return;
+            selected = value;
+            pillTarget = value * ItemHeight;
+            if (pillY < 0) pillY = pillTarget;
+            anim.Start();
+            Invalidate();
+            if (SelectedIndexChanged != null) SelectedIndexChanged(this, EventArgs.Empty);
         }
-
-        /* 固定 x，不用 b.X：ListBox 万一有横向滚动偏移，b.X 会是负数 */
-        Font f = sel ? Theme.NavBold : Font;
-        using (SolidBrush br = new SolidBrush(sel ? Theme.Accent : Theme.Text))
-            g.DrawString(Items[e.Index].ToString(), f, br, 20, b.Y + (b.Height - f.Height) / 2 + 1);
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        int i = IndexFromPoint(e.Location);
+        int i = (e.Y - 8) / ItemHeight;
+        if (i < 0 || i >= Items.Count) i = -1;
         if (i != hoverIndex) { hoverIndex = i; Invalidate(); }
     }
 
@@ -281,9 +417,63 @@ class NavList : ListBox
         base.OnMouseLeave(e);
         if (hoverIndex != -1) { hoverIndex = -1; Invalidate(); }
     }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        int i = (e.Y - 8) / ItemHeight;
+        if (i >= 0 && i < Items.Count) SelectedIndex = i;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        Graphics g = e.Graphics;
+        Theme.AA(g);
+
+        const int pad = 9;
+        const int top = 8;
+        int w = Math.Max(10, Width - pad * 2);
+
+        if (pillY >= 0)
+        {
+            Rectangle pill = new Rectangle(pad, top + (int)Math.Round(pillY), w, ItemHeight - 8);
+            using (GraphicsPath p = Theme.Round(pill, 12))
+            {
+                using (LinearGradientBrush b = new LinearGradientBrush(
+                    new Rectangle(pill.X, pill.Y, pill.Width, pill.Height + 1),
+                    Color.FromArgb(64, 84, 168, 255), Color.FromArgb(52, 10, 132, 255), 90f))
+                    g.FillPath(b, p);
+                using (Pen pen = new Pen(Color.FromArgb(90, 10, 132, 255), 1f)) g.DrawPath(pen, p);
+                using (Pen hp = new Pen(Color.FromArgb(110, 255, 255, 255)))
+                    g.DrawLine(hp, pill.X + 10, pill.Y + 1, pill.Right - 11, pill.Y + 1);
+            }
+        }
+
+        for (int i = 0; i < Items.Count; i++)
+        {
+            int y = top + i * ItemHeight;
+
+            if (i == hoverIndex && i != selected)
+            {
+                Rectangle hr = new Rectangle(pad, y, w, ItemHeight - 8);
+                using (GraphicsPath p = Theme.Round(hr, 12))
+                using (SolidBrush b = new SolidBrush(Theme.Hover))
+                    g.FillPath(b, p);
+            }
+
+            bool sel = (i == selected);
+            Font f = sel ? Theme.NavBold : Theme.NavItem;
+            Color fg = sel ? Theme.Accent : Theme.Text;
+            Rectangle tr = new Rectangle(pad + 18, y, w - 24, ItemHeight - 8);
+            TextRenderer.DrawText(g, Items[i], f, tr, fg,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix
+                | TextFormatFlags.EndEllipsis);
+        }
+    }
 }
 
-/* 一行键值对（概览页用） */
+/* ---------------- 概览页的一行键值对 ---------------- */
 class InfoRow
 {
     public static void Add(Panel host, string key, string val, int y, int w, bool mono)
@@ -292,14 +482,16 @@ class InfoRow
         k.Text = key;
         k.ForeColor = Theme.Muted;
         k.Font = Theme.Base;
-        k.SetBounds(18, y, 84, 20);
+        k.BackColor = Color.Transparent;
+        k.SetBounds(18, y, 96, 20);
         host.Controls.Add(k);
 
         Label v = new Label();
         v.Text = val;
         v.ForeColor = Theme.Text;
         v.Font = mono ? Theme.Mono : Theme.Base;
-        v.SetBounds(108, y, w - 130, 20);
+        v.BackColor = Color.Transparent;
+        v.SetBounds(120, y, w - 142, 20);
         v.AutoEllipsis = true;
         host.Controls.Add(v);
     }
