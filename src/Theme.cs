@@ -173,6 +173,16 @@ static class Theme
     }
 }
 
+/* 普通面板 + 双缓冲。内容区用它：标准绘制路径最稳，
+   不要用自绘面板承载整个页面。 */
+class BuffPanel : Panel
+{
+    public BuffPanel()
+    {
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+    }
+}
+
 /* ---------------- 面板基类 ---------------- */
 class Glass : Panel
 {
@@ -204,6 +214,11 @@ class Glass : Panel
         Graphics g = e.Graphics;
         Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
         if (r.Width <= 0 || r.Height <= 0) return;
+
+        /* 自己铺底，不去指望 OnPaintBackground ——
+           这些控件开了 UserPaint/AllPaintingInWmPaint，背景回调不一定被调到，
+           没铺到的地方就是没画过的原始像素（黑的），旧页面的字也擦不掉。 */
+        using (SolidBrush bg = new SolidBrush(BackColor)) g.FillRectangle(bg, 0, 0, Width, Height);
 
         if (Radius > 0)
             Theme.GlassFace(g, r, Radius, FillTop, FillBottom, Edge, Highlight && DrawEdge);
@@ -284,6 +299,8 @@ class Flat : Button
         Rectangle r = new Rectangle(0, 0, Width - 1, Height - 1);
         if (r.Width <= 0 || r.Height <= 0) return;
 
+        using (SolidBrush bg = new SolidBrush(BackColor)) g.FillRectangle(bg, 0, 0, Width, Height);
+
         Color top, bot, edge;
         Color fore;
 
@@ -332,6 +349,8 @@ class GreenCheck : CheckBox
 
     protected override void OnPaint(PaintEventArgs e)
     {
+        using (SolidBrush bg = new SolidBrush(BackColor)) e.Graphics.FillRectangle(bg, ClientRectangle);
+
         int box = 17;
         Rectangle r = new Rectangle(0, (Height - box) / 2, box, box);
         Theme.DrawCheck(e.Graphics, r, Checked, hover);

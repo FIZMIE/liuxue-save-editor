@@ -67,6 +67,9 @@ static class Program
             try { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "crash2.log"), e.ExceptionObject.ToString()); } catch { }
         };
 
+        for (int i = 0; i + 1 < args.Length; i++)
+            if (args[i] == "--page") { int pg; if (int.TryParse(args[i + 1], out pg)) SaveForm.StartPage = pg; }
+
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         if (args.Length >= 2 && args[0] == "--shot")
@@ -91,6 +94,7 @@ static class Program
 class SaveForm : Form
 {
     const string APPNAME = "留学模拟器 存档修改器";
+    public static int StartPage = -1;   // --page N：启动就开在第 N 页（调试用）
     const string AUTHOR = "FIZMIE";
     const string APPVER  = "2.0";
 
@@ -129,19 +133,12 @@ class SaveForm : Form
 
         Resize += delegate { DoLayout(); };
         ResizeEnd += delegate { DoLayout(); ShowPage(); };
-        Load += delegate { DoLayout(); ReloadSaveList(); };
+        Load += delegate { DoLayout(); ReloadSaveList(); if (StartPage >= 0) GotoPage(StartPage); };
     }
 
     /* 整页重排时先把窗口冻结，排完再一次性画出来。
        不这样做的话新控件会一个个往下刷，看着就是"从上往下刷新"的老式观感。 */
     [DllImport("user32.dll")] static extern int SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
-    void Freeze() { try { SendMessage(Handle, 0x000B, 0, 0); } catch { } }
-    void Thaw()
-    {
-        try { SendMessage(Handle, 0x000B, 1, 0); } catch { }
-        Invalidate(true);
-    }
-
     /* 递归把控件底色刷成它所在表面的颜色。
        全部用不透明：透明控件会让 WinForms 反过来重画父级背景，
        卡片套卡片时会把别的卡片内容画串行。 */
@@ -266,7 +263,7 @@ class SaveForm : Form
         nav.SelectedIndexChanged += delegate { ShowPage(); };
         left.Controls.Add(nav);
 
-        host = new Panel();
+        host = new BuffPanel();
         host.SetBounds(170, 108, 10, 10);
         host.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
         host.BackColor = Theme.Bg;
@@ -277,7 +274,7 @@ class SaveForm : Form
            之前是 9 个面板各自隐藏/显示，结果是：建面板时它是隐藏的，
            WinForms 不会给它里面的控件建窗口句柄，之后改成可见也不会补建，
            页面就是一片空白。一个常显面板就没这问题。 */
-        content = new Panel();
+        content = new BuffPanel();
         content.Dock = DockStyle.Fill;
         content.AutoScroll = true;
         content.BackColor = Theme.Bg;
@@ -303,7 +300,6 @@ class SaveForm : Form
         if (nav.SelectedIndex < 0 || doc == null) return;
         string key = NavNames[nav.SelectedIndex];
 
-        Freeze();
         content.SuspendLayout();
         content.Controls.Clear();
         content.AutoScrollPosition = new Point(0, 0);
@@ -326,7 +322,6 @@ class SaveForm : Form
            这里自顶向下强制把句柄建出来，再逐个刷新。 */
         MakeOpaque(content, Theme.Bg);
         Realize(content);
-        Thaw();
     }
 
     static void Realize(Control c)
