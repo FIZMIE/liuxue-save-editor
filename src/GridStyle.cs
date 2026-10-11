@@ -9,6 +9,16 @@ static class GridStyle
 {
     public static void Apply(DataGridView g)
     {
+        /* DataGridView 的 DoubleBuffered 是 protected，只能反射打开。
+           不开的话它每次只重画变化的那几格，底下的旧像素留着不走。 */
+        try
+        {
+            typeof(DataGridView).GetProperty("DoubleBuffered",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                .SetValue(g, true, null);
+        }
+        catch { }
+
         g.BackgroundColor = Theme.Card;
         g.BorderStyle = BorderStyle.None;
         g.EnableHeadersVisualStyles = false;
@@ -32,7 +42,8 @@ static class GridStyle
 
         g.DefaultCellStyle.BackColor = Theme.Card;
         g.DefaultCellStyle.ForeColor = Theme.Text;
-        g.DefaultCellStyle.SelectionBackColor = Theme.AccentBg;
+        /* DataGridView 不支持带 alpha 的颜色，给了半透明会直接渲染成黑色 */
+        g.DefaultCellStyle.SelectionBackColor = Color.FromArgb(228, 238, 252);
         g.DefaultCellStyle.SelectionForeColor = Theme.Text;
         g.DefaultCellStyle.Font = Theme.Base;
         g.DefaultCellStyle.Padding = new Padding(6, 0, 0, 0);

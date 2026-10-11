@@ -67,8 +67,9 @@ static class Program
             try { File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "crash2.log"), e.ExceptionObject.ToString()); } catch { }
         };
 
-        for (int i = 0; i + 1 < args.Length; i++)
-            if (args[i] == "--page") { int pg; if (int.TryParse(args[i + 1], out pg)) SaveForm.StartPage = pg; }
+        for (int i = 0; i < args.Length; i++)
+            if (args[i] == "--page" && i + 1 < args.Length) { int pg; if (int.TryParse(args[i + 1], out pg)) SaveForm.StartPage = pg; }
+            else if (args[i] == "--timing") SaveForm.Timing = true;
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
@@ -94,7 +95,18 @@ static class Program
 class SaveForm : Form
 {
     const string APPNAME = "留学模拟器 存档修改器";
-    public static int StartPage = -1;   // --page N：启动就开在第 N 页（调试用）
+    public static int StartPage = -1;
+    public static bool Timing = false;      // --timing：把每页构建耗时写进 timing.log
+    [DllImport("user32.dll")] static extern bool RedrawWindow(IntPtr hWnd, IntPtr rect, IntPtr region, uint flags);
+    const uint RDW_INVALIDATE = 0x0001, RDW_ERASE = 0x0004;
+    const uint RDW_ALLCHILDREN = 0x0080, RDW_UPDATENOW = 0x0100;
+
+    public static void T(string s)
+    {
+        if (!Timing) return;
+        try { File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "timing.log"), s + Environment.NewLine); } catch { }
+    }
+   // --page N：启动就开在第 N 页（调试用）
     const string AUTHOR = "FIZMIE";
     const string APPVER  = "2.0";
 
@@ -300,8 +312,18 @@ class SaveForm : Form
         if (nav.SelectedIndex < 0 || doc == null) return;
         string key = NavNames[nav.SelectedIndex];
 
+        System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+
         content.SuspendLayout();
-        content.Controls.Clear();
+
+        /* 必须真的 Dispose：Controls.Clear() 只是解除父子关系，
+           旧控件的窗口还活着，屏幕上就会留下上一页的字。 */
+        while (content.Controls.Count > 0)
+        {
+            Control old = content.Controls[0];
+            content.Controls.RemoveAt(0);
+            try { old.Dispose(); } catch { }
+        }
         content.AutoScrollPosition = new Point(0, 0);
 
         if (key == "概览") BuildOverview();
@@ -314,6 +336,7 @@ class SaveForm : Form
         else if (key == "原始数据") BuildRaw();
         else if (key == "说明") BuildHelp();
 
+        T(key + "  构建 = " + sw.ElapsedMilliseconds + " ms");
         content.ResumeLayout(true);
         content.PerformLayout();
 
@@ -321,7 +344,25 @@ class SaveForm : Form
            控件不会自己显示出来（点导航就白屏就是这个原因）。
            这里自顶向下强制把句柄建出来，再逐个刷新。 */
         MakeOpaque(content, Theme.Bg);
+        T(key + "  透明化 = " + sw.ElapsedMilliseconds + " ms");
         Realize(content);
+        /* 同步刷一次：既保证整页一次画干净（否则表格首行会残留上一页的字），
+           也把"首次绘制"的耗时算进来 */
+        content.Refresh();
+        try
+        {
+            RedrawWindow(Handle, IntPtr.Zero, IntPtr.Zero,
+                RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        }
+        catch { }
+        T(key + "  合计(含首帧) = " + sw.ElapsedMilliseconds + " ms  控件数=" + CountAll(content));
+    }
+
+    static int CountAll(Control c)
+    {
+        int n = 1;
+        foreach (Control ch in c.Controls) n += CountAll(ch);
+        return n;
     }
 
     static void Realize(Control c)
