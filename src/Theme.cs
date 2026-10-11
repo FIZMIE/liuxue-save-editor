@@ -311,9 +311,10 @@ class Flat : Button
         }
         else if (Primary)
         {
-            top = down ? Theme.AccentDim : (hover ? Color.FromArgb(64, 156, 255) : Color.FromArgb(48, 148, 255));
-            bot = down ? Color.FromArgb(0, 96, 210) : (hover ? Theme.AccentDim : Theme.Accent);
-            edge = Color.FromArgb(0, 100, 210);
+            /* 纯色，不要渐变：渐变会让同一颗按钮上下不是一个蓝 */
+            top = down ? Theme.AccentDim : (hover ? Color.FromArgb(38, 148, 255) : Theme.Accent);
+            bot = top;
+            edge = top;
             fore = Color.White;
         }
         else

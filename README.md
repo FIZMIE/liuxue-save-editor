@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="src/app.png" width="128" alt="FZ">
+</p>
+
 # 留学模拟器 存档修改器
 
 > 《留学模拟器》(Study Abroad Simulator) 的存档修改工具 · 原生 Windows 窗口 · 单文件绿色版

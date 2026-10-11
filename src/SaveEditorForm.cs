@@ -191,22 +191,23 @@ class SaveForm : Form
         /* 深色标题条 */
         Glass hd = new Glass();
         hd.SetBounds(0, 0, 4000, 56);
-        hd.FillTop = Theme.Header;
-        hd.FillBottom = Theme.Header;
+        hd.FillTop = Color.White;
+        hd.FillBottom = Color.White;
         hd.DrawEdge = false;
+        hd.HairBottom = true;
         hd.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         hd.Paint += delegate(object s, PaintEventArgs e)
         {
             e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-            using (SolidBrush b = new SolidBrush(Color.White))
-                e.Graphics.DrawString("留学模拟器 存档修改器", Theme.HeaderTitle, b, 20, 14);
+            using (SolidBrush b = new SolidBrush(Theme.Text))
+                e.Graphics.DrawString("留学模拟器 存档修改器", Theme.HeaderTitle, b, 20, 15);
             /* 版本号跟在标题后面，位置按实测宽度算 —— 换字体后标题宽度会变，
                写死 x 就会叠在一起 */
             Size ts = TextRenderer.MeasureText(e.Graphics, "留学模拟器 存档修改器", Theme.HeaderTitle);
-            using (SolidBrush b = new SolidBrush(Theme.HeaderSub))
-                e.Graphics.DrawString("v" + APPVER, Theme.Small, b, 22 + ts.Width, 26);
+            using (SolidBrush b = new SolidBrush(Theme.Faint))
+                e.Graphics.DrawString("v" + APPVER, Theme.Small, b, 22 + ts.Width, 27);
             TextRenderer.DrawText(e.Graphics, "by " + AUTHOR, Theme.Small,
-                new Rectangle(0, 0, ClientSize.Width - 22, hd.Height), Theme.HeaderSub,
+                new Rectangle(0, 0, ClientSize.Width - 22, hd.Height), Theme.Faint,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
         };
         p.Controls.Add(hd);
