@@ -189,16 +189,15 @@ class Glass : Panel
 
     public Glass()
     {
-        SetStyle(ControlStyles.SupportsTransparentBackColor
-               | ControlStyles.OptimizedDoubleBuffer
+        /* 刻意不用透明：WinForms 的透明子控件会反过来让父级重画背景，
+           卡片套卡片时会串味（把别的卡片标题画到这一行上）。
+           这里改成不透明 + 填入所在底色，圆角照样是抗锯齿画的。 */
+        SetStyle(ControlStyles.OptimizedDoubleBuffer
                | ControlStyles.AllPaintingInWmPaint
                | ControlStyles.UserPaint
                | ControlStyles.ResizeRedraw, true);
-        BackColor = Color.Transparent;
+        BackColor = Theme.Bg;
     }
-
-    /* 先把父级底色画进来，圆角外面才是对的颜色（不用 Region，避免锯齿） */
-    protected override void OnPaintBackground(PaintEventArgs e) { base.OnPaintBackground(e); }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -252,7 +251,7 @@ class Card : Glass
         FillBottom = Color.FromArgb(249, 251, 253, 255);
         Edge = Theme.Border;
         Highlight = true;
-        BackColor = Color.Transparent;
+        BackColor = Theme.Bg;      // 方角与页面同色 -> 只剩抗锯齿的圆角
     }
 }
 
@@ -270,17 +269,14 @@ class Flat : Button
         Font = Theme.Base;
         Cursor = Cursors.Hand;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
-               | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw
-               | ControlStyles.SupportsTransparentBackColor, true);
-        BackColor = Color.Transparent;
+               | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        BackColor = Color.White;   // 圆角外的像素要有东西填，否则是黑的
         MouseEnter += delegate { hover = true; Invalidate(); };
         MouseLeave += delegate { hover = false; down = false; Invalidate(); };
         MouseDown += delegate { down = true; Invalidate(); };
         MouseUp += delegate { down = false; Invalidate(); };
         EnabledChanged += delegate { Invalidate(); };
     }
-
-    protected override void OnPaintBackground(PaintEventArgs e) { base.OnPaintBackground(e); }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -327,15 +323,12 @@ class GreenCheck : CheckBox
         Font = Theme.Base;
         Cursor = Cursors.Hand;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint
-               | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw
-               | ControlStyles.SupportsTransparentBackColor, true);
-        BackColor = Color.Transparent;
+               | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        BackColor = Color.White;   // 圆角外的像素要有东西填，否则是黑的
         MouseEnter += delegate { hover = true; Invalidate(); };
         MouseLeave += delegate { hover = false; Invalidate(); };
         CheckedChanged += delegate { Invalidate(); };
     }
-
-    protected override void OnPaintBackground(PaintEventArgs e) { base.OnPaintBackground(e); }
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -375,6 +368,7 @@ class NavBar : Glass
         Radius = Theme.Radius;
         Edge = Theme.Border;
         Highlight = false;
+        BackColor = Theme.Bg;
         Font = Theme.NavItem;
         Cursor = Cursors.Hand;
 
@@ -482,7 +476,7 @@ class InfoRow
         k.Text = key;
         k.ForeColor = Theme.Muted;
         k.Font = Theme.Base;
-        k.BackColor = Color.Transparent;
+        k.BackColor = Color.White;
         k.SetBounds(18, y, 96, 20);
         host.Controls.Add(k);
 
@@ -490,7 +484,7 @@ class InfoRow
         v.Text = val;
         v.ForeColor = Theme.Text;
         v.Font = mono ? Theme.Mono : Theme.Base;
-        v.BackColor = Color.Transparent;
+        v.BackColor = Color.White;
         v.SetBounds(120, y, w - 142, 20);
         v.AutoEllipsis = true;
         host.Controls.Add(v);

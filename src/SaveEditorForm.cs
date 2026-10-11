@@ -142,17 +142,21 @@ class SaveForm : Form
         Invalidate(true);
     }
 
-    /* 标签默认是不透明的系统灰，会把磨砂玻璃盖住，统一改成透明 */
-    static void MakeGlass(Control c)
+    /* 递归把控件底色刷成它所在表面的颜色。
+       全部用不透明：透明控件会让 WinForms 反过来重画父级背景，
+       卡片套卡片时会把别的卡片内容画串行。 */
+    static void MakeOpaque(Control c, Color surface)
     {
+        if (c is Card) surface = Color.White;
         try
         {
-            if (!(c is Glass) && (c is Label || c is CheckBox || c is Panel
-                || c is FlowLayoutPanel || c is TableLayoutPanel))
-                c.BackColor = Color.Transparent;
+            if (!(c is Glass) && !(c is Flat) && !(c is GreenCheck)
+                && (c is Label || c is CheckBox || c is Panel
+                    || c is FlowLayoutPanel || c is TableLayoutPanel))
+                c.BackColor = surface;
         }
         catch { }
-        foreach (Control ch in c.Controls) MakeGlass(ch);
+        foreach (Control ch in c.Controls) MakeOpaque(ch, surface);
     }
 
     /* 四个区域全部按像素算，不依赖 WinForms 的 Dock 顺序 */
@@ -265,7 +269,7 @@ class SaveForm : Form
         host = new Panel();
         host.SetBounds(170, 108, 10, 10);
         host.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
-        host.BackColor = Color.Transparent;
+        host.BackColor = Theme.Bg;
         host.AutoScroll = false;
         Controls.Add(host);
 
@@ -276,7 +280,7 @@ class SaveForm : Form
         content = new Panel();
         content.Dock = DockStyle.Fill;
         content.AutoScroll = true;
-        content.BackColor = Color.Transparent;
+        content.BackColor = Theme.Bg;
         host.Controls.Add(content);
 
         nav.SelectedIndex = 0;
@@ -320,7 +324,7 @@ class SaveForm : Form
         /* 关键：窗口已经显示出来之后再往里加控件，光靠 ResumeLayout 是不够的，
            控件不会自己显示出来（点导航就白屏就是这个原因）。
            这里自顶向下强制把句柄建出来，再逐个刷新。 */
-        MakeGlass(content);
+        MakeOpaque(content, Theme.Bg);
         Realize(content);
         Thaw();
     }
@@ -363,7 +367,7 @@ class SaveForm : Form
         fl.FlowDirection = FlowDirection.RightToLeft;
         fl.WrapContents = false;
         fl.AutoSize = true;
-        fl.BackColor = Color.Transparent;
+        fl.BackColor = Color.White;
         fl.Padding = new Padding(0, 12, 18, 0);
         p.Controls.Add(fl);
 
